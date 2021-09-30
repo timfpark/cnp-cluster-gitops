@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      name: grafana
+      labels:
+        app: grafana
+    spec:
+      initContainers:
+        - name: download-dashboards
+          image: "curlimages/curl:7.73.0"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh"]
+          args: [ "-c", "mkdir -p /var/lib/grafana/dashboards/default && /bin/sh -x /etc/grafana/download_dashboards.sh" ]
+          resources:
+            {}
+          env:
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/grafana/download_dashboards.sh"
+              subPath: download_dashboards.sh
+            - name: grafana-storage
+              mountPath: "/var/lib/grafana"
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - name: grafana
+          containerPort: 3000
+        resources:
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+          requests: 
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+          - mountPath: /var/lib/grafana 
+            name: grafana-storage
+          - mountPath: /etc/grafana/provisioning/datasources
+            name: grafana-datasources
+            readOnly: false
+          - name: dashboards-default
+            mountPath: "/var/lib/grafana/dashboards/default/dotnet.json"
+            subPath: "dotnet.json"
+          - name: dashboards-default
+            mountPath: "/var/lib/grafana/dashboards/default/ngsa.json"
+            subPath: "ngsa.json"
+          - name: config
+            mountPath: "/etc/grafana/provisioning/dashboards/dashboardproviders.yaml"
+            subPath: dashboardproviders.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: grafana
+        - name: dashboards-default
+          configMap:
+            name: grafana-dashboards-default
+        - name: grafana-storage
+          emptyDir: {}
+        - name: grafana-datasources
+          configMap:
+              defaultMode: 420
+              name: grafana-datasources
